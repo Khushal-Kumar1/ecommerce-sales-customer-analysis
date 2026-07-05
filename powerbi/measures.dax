@@ -1,0 +1,58 @@
+// ============================================================
+// DAX Measures — E-Commerce Sales & Customer Analysis Dashboard
+// Paste these into Power BI Desktop: Modeling > New Measure
+// ============================================================
+
+Total Revenue =
+CALCULATE(SUM(fact_orders[order_total]), fact_orders[order_status] <> "Cancelled")
+
+Total Orders =
+CALCULATE(DISTINCTCOUNT(fact_orders[order_id]), fact_orders[order_status] <> "Cancelled")
+
+Average Order Value =
+DIVIDE([Total Revenue], [Total Orders])
+
+Return Rate % =
+DIVIDE(
+    CALCULATE(SUM(fact_orders[is_returned])),
+    CALCULATE(COUNTROWS(fact_orders), fact_orders[order_status] <> "Cancelled")
+)
+
+Revenue MoM Growth % =
+VAR CurrentRevenue = [Total Revenue]
+VAR PrevMonthRevenue =
+    CALCULATE([Total Revenue], DATEADD('Calendar'[Date], -1, MONTH))
+RETURN
+    DIVIDE(CurrentRevenue - PrevMonthRevenue, PrevMonthRevenue)
+
+Top 20% Customer Revenue Share % =
+VAR CustomerRevenue =
+    ADDCOLUMNS(
+        VALUES(dim_customers[customer_id]),
+        "CustRev", CALCULATE([Total Revenue])
+    )
+VAR RankedCustomers =
+    ADDCOLUMNS(
+        CustomerRevenue,
+        "Rnk", RANKX(CustomerRevenue, [CustRev], , DESC)
+    )
+VAR TotalCustomers = COUNTROWS(CustomerRevenue)
+VAR Top20Count = ROUNDUP(TotalCustomers * 0.2, 0)
+VAR Top20Revenue =
+    SUMX(FILTER(RankedCustomers, [Rnk] <= Top20Count), [CustRev])
+RETURN
+    DIVIDE(Top20Revenue, SUMX(CustomerRevenue, [CustRev]))
+
+Distinct Customers =
+DISTINCTCOUNT(fact_orders[customer_id])
+
+Repeat Customer Rate % =
+VAR CustomersWithMultipleOrders =
+    COUNTROWS(
+        FILTER(
+            SUMMARIZE(fact_orders, fact_orders[customer_id], "OrderCount", COUNT(fact_orders[order_id])),
+            [OrderCount] > 1
+        )
+    )
+RETURN
+    DIVIDE(CustomersWithMultipleOrders, [Distinct Customers])
